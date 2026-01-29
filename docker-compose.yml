@@ -1,0 +1,12 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8001:8001"
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
+    # 如果需要挂载本地代码进行开发，取消下面的注释
+    # volumes:
+    #   - .:/app
+    #   - /app/.venv
