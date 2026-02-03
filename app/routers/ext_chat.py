@@ -451,7 +451,7 @@ async def chat_completions_real(
 
 
 @router.post("/extChatApi/v3/chat/policy_chat")
-async def chat_completions_real(
+async def chat_completions_policy_chat(
     request: ChatRequest,
     raw_request: Request,
     app_id: Optional[str] = Header(None, alias="appId"),
@@ -463,6 +463,125 @@ async def chat_completions_real(
     # Coze Configuration
     COZE_API_TOKEN = "pat_b9214c6c6d5f00473130b4e6f38fb7eca18d242caa7eee352178a398c80977ad"
     COZE_BOT_ID = "7601077888883884032"
+    
+    # COZE_BOT_ID = "7597694170307756032"
+    # COZE_BASE_URL = "http://192.168.124.8:18888"
+    COZE_BASE_URL = "https://stud.tjut.edu.cn.mycoze.jeremy233.club/"
+
+    # Extract user query
+    query = '''
+[
+    { "类别": "火锅", "营收额占比(%)": 22 },
+    { "类别": "自助餐", "营收额占比(%)": 12 },
+    { "类别": "小吃快餐", "营收额占比(%)": 8 },
+    { "类别": "西餐", "营收额占比(%)": 6 },
+    { "类别": "其它", "营收额占比(%)": 44 }
+  ]
+'''
+    for msg in reversed(request.messages):
+        if msg.role == "user":
+            query = msg.content
+            break
+
+    async def event_generator():
+        url = f"{COZE_BASE_URL}/v3/chat"
+        headers = {
+            "Authorization": f"Bearer {COZE_API_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "bot_id": COZE_BOT_ID,
+            "user_id": "user_default",
+            "stream": True,
+            "auto_save_history": True,
+            "additional_messages": [
+                {
+                    "role": "user",
+                    "content": query,
+                    "content_type": "text"
+                }
+            ]
+        }
+
+        current_content = ""
+        
+        async with httpx.AsyncClient() as client:
+            try:
+                async with client.stream("POST", url, headers=headers, json=payload, timeout=120.0) as response:
+                    if response.status_code != 200:
+                        error_msg = f"Coze API Error: {response.status_code}"
+                        yield f"data: {json.dumps({'error': error_msg}, ensure_ascii=False)}\n\n"
+                        return
+
+                    event_type = None
+                    async for line in response.aiter_lines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                        
+                        logger.info(f"Coze Stream Line: {line}")
+                        
+                        if line.startswith("event:"):
+                            event_type = line[6:].strip()
+                        elif line.startswith("data:"):
+                            data_str = line[5:].strip()
+                            
+                            if event_type == "conversation.message.delta":
+                                try:
+                                    data = json.loads(data_str)
+                                    content = data.get("content", "")
+                                    if content:
+                                        current_content += content
+                                        
+                                        current_timestamp = int(time.time() * 1000)
+                                        resp_data = {
+                                            "created": current_timestamp,
+                                            "model": "coze-bot",
+                                            "id": str(current_timestamp),
+                                            "choices": [
+                                                {
+                                                    "finish_reason": None,
+                                                    "delta": {
+                                                        "role": "assistant",
+                                                        "content": current_content
+                                                    }
+                                                }
+                                            ],
+                                            "object": "chat.completion.chunk"
+                                        }
+                                        yield f"data: {json.dumps(resp_data, ensure_ascii=False)}\n\n"
+                                except json.JSONDecodeError:
+                                    continue
+                            elif event_type == "error":
+                                logger.error(f"Coze Error Event: {data_str}")
+                                try:
+                                    data = json.loads(data_str)
+                                    error_msg = data.get("msg", "Unknown Coze Error")
+                                    yield f"data: {json.dumps({'error': error_msg}, ensure_ascii=False)}\n\n"
+                                except:
+                                    yield f"data: {json.dumps({'error': data_str}, ensure_ascii=False)}\n\n"
+            except Exception as e:
+                logger.error(f"Stream error: {e}")
+                yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/extChatApi/v3/chat/policy_list")
+async def chat_completions_policy_list(
+    request: ChatRequest,
+    raw_request: Request,
+    app_id: Optional[str] = Header(None, alias="appId"),
+    app_key: Optional[str] = Header(None, alias="appKey")
+):
+    body = await raw_request.body()
+    logger.info(f"Real Chat - app_id: {app_id}, app_key: {app_key}, request: {body.decode('utf-8')}")
+
+    # Coze Configuration
+    COZE_API_TOKEN = "pat_b9214c6c6d5f00473130b4e6f38fb7eca18d242caa7eee352178a398c80977ad"
+    COZE_BOT_ID = "7602107483095564288"
     
     # COZE_BOT_ID = "7597694170307756032"
     # COZE_BASE_URL = "http://192.168.124.8:18888"

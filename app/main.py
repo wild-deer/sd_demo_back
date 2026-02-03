@@ -2,7 +2,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import  FastAPI
 
 from routers import db_query
-from routers import users, items, ext_secret, ext_chat
+from routers import users, items, ext_secret, ext_chat, fake_data
 from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.docs import (
     get_redoc_html,
@@ -71,6 +71,7 @@ app.include_router(items.router)
 app.include_router(ext_secret.router)
 app.include_router(ext_chat.router)
 app.include_router(db_query.router)
+app.include_router(fake_data.router)
 
 # sqladmin
 
